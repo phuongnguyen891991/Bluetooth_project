@@ -1865,7 +1865,7 @@ static GOptionEntry bt_options[] = {
 	{ "value", 'v' , 0, G_OPTION_ARG_STRING, &opt_value,
 		"Write characteristic value (required for write operation)",
 		"0x0001" },
-	{ "interactive", 't', 0, G_OPTION_ARG_NONE, &opt_interactive,
+	{ "interactive", 'p', 0, G_OPTION_ARG_NONE, &opt_interactive,
 		 "Use interactive mode", NULL },	
 	{ NULL },
 };
