@@ -881,20 +881,6 @@ static void delete_database(const char* table_name, const char* identify, char* 
     }
 }
 
-// static int listdevice_callback(void *devicelist, int argc, char **argv, char **azColName)
-// {
-//     int i;
-//     json_object * jobj = json_object_new_object();
-
-//     for(i=0; i<argc; i++)
-//     {
-//         json_object_object_add(jobj, azColName[i], json_object_new_string(argv[i] ? argv[i] : "NULL"));
-//     }
-//     json_object_array_add(devicelist, jobj);
-//     return 0;
-// }
-
-
 static void sigint_handler(int sig)
 {
 	signal_received = sig;
@@ -933,52 +919,6 @@ static void eir_parse_name(uint8_t *eir, size_t eir_len,
 
 failed:
 	snprintf(buf, buf_len, "(unknown)");
-}
-#ifndef HEXDUMP_COLS
-#define HEXDUMP_COLS 16
-#endif
-void hexdump(void *mem, unsigned int len)
-{
-   // if (gLogLevel<3) return;
-    unsigned int i, j;
-    for(i = 0; i < len + ((len % HEXDUMP_COLS) ? (HEXDUMP_COLS - len % HEXDUMP_COLS) : 0); i++)
-    {
-        /* print offset */
-        // if(i % HEXDUMP_COLS == 0)
-        // {
-        //     printf("0x%06x: ", i);
-        // }
-        /* print hex data */
-        if(i < len)
-        {
-            printf("%02x ", 0xFF & ((char*)mem)[i]);
-        }
-        else /* end of block, just aligning for ASCII dump */
-        {
-            printf("   ");
-        }
-
-        /* print ASCII dump */
-        // if(i % HEXDUMP_COLS == (HEXDUMP_COLS - 1))
-        // {
-        //     for(j = i - (HEXDUMP_COLS - 1); j <= i; j++)
-        //     {
-        //         if(j >= len) /* end of block, not really printing */
-        //         {
-        //             putchar(' ');
-        //         }
-        //         else if(isprint(((char*)mem)[j])) /* printable char */
-        //         {
-        //             putchar(0xFF & ((char*)mem)[j]);
-        //         }
-        //         else /* other char */
-        //         {
-        //             putchar('.');
-        //         }
-        //     }
-           // putchar('\n');
-        // }
-    }
 }
 
 void process_data(uint8_t *data, size_t data_len, le_advertising_info *info)
@@ -1173,26 +1113,7 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 	        }
 	      }
 		printf("+++++++++++++++++++++\n");
-//	printf("evt_type: 0x%02x\n", info->evt_type);
-//	printf("bdaddr_type: 0x%02x\n", info->bdaddr_type);
-//	printf("Length : %02X \n", info->length);
-//	if (check_report_filter(filter_type, info)) {
-//		char name[30];
-//		int counter_tmp;
-//
-//		memset(name, 0, sizeof(name));
-//		ba2str(&info->bdaddr, addr);
-//		eir_parse_name(info->data, info->length,
-//						name, sizeof(name) - 1);
-//
-//		printf("mac : %s \nname : %s\n", addr, name);
-//		hexdump(info->data,info->length);
-//		printf("\n \n");
-//
-//	 	//check_configure(info->data[9],info->data[10]);
-//	 }
-	};
-
+	}
 done:
 	setsockopt(dd, SOL_HCI, HCI_FILTER, &of, sizeof(of));
 
@@ -1200,8 +1121,10 @@ done:
 		return -1;
 
 	return 0;
+ 	
 }
-static void cmd_scan(int dev_id,int argc ,char **argvp)
+
+static void cmd_scan (int dev_id, int argc, char **argvp)
 {
 	inquiry_info *ii = NULL;
     int max_rsp, num_rsp;
@@ -1871,6 +1794,10 @@ static void cmd_lecup(int dev_id, int argc, char **argv)
 	hci_close_dev(dd);
 }
 
+static void cmd_interactive (int parameter, int argc,char **argvp)
+{
+	printf("interactive");
+}
 enum ENUM_COMMAND{
 
 	ENUM_COMMAND_HELP = 0,
@@ -1882,8 +1809,6 @@ enum ENUM_COMMAND{
 	ENUM_COMMAND_CONNECT,
 	ENUM_COMMAND_WRITE,
 	ENUM_COMMAND_DIMMER_COLOR,
-	ENUM_COMMAND_READ,
-	ENUM_COMMAND_INTERACTIVE,
 	ENUM_END
 };
 
@@ -1902,8 +1827,8 @@ static struct {
 	{ "connect",		cmd_connect,		"c", 			"(-c <address [address type]) Connect to a remote device" },
 	{ "write",			cmd_char_write,		"w",			"(-w <handle> <value>) Turn ON/OFF bulb (No response)" },
 	{ "dimmer/color",	cmd_char_write,		"d",			"(-d/-l <handle> <value>>) Dimmer/change color (No response)" },
-	{ "read",			cmd_char_read,		"r",			"Characteristics Value/Descriptor Read" },
-	{ "interactive",                     NULL ,          "t",                    "interactive" },
+	//{ "read",			cmd_char_read,		"r",			"Characteristics Value/Descriptor Read" },
+	//{ "interactive",    0 ,   "t",                    "interactive" },
 	{ NULL, NULL, 0}
 };
 
@@ -1933,8 +1858,6 @@ static GOptionEntry bt_options[] = {
 		"status bluetooth devices",NULL },
 	{ "char-write-req", 'w', 0, G_OPTION_ARG_NONE, &opt_write,
 		"Characteristics Value Write (Write Request)", NULL },
-	{ "interactive", 't', G_OPTION_FLAG_IN_MAIN, G_OPTION_ARG_NONE, &opt_interactive,
-		 "Use interactive mode", NULL },
 	{ "device", 'c', 0, G_OPTION_ARG_STRING, &opt_dst,
 		"Specify remote Bluetooth address", "MAC" },
 	{ "handle", 'a' , 0, G_OPTION_ARG_INT, &opt_handle,
@@ -1942,25 +1865,11 @@ static GOptionEntry bt_options[] = {
 	{ "value", 'v' , 0, G_OPTION_ARG_STRING, &opt_value,
 		"Write characteristic value (required for write operation)",
 		"0x0001" },
+	{ "interactive", 't', 0, G_OPTION_ARG_NONE, &opt_interactive,
+		 "Use interactive mode", NULL },	
 	{ NULL },
 };
-// gboolean timeout_callback(gpointer data)
-// {
-//     static int i = 0;
-//     i++;
 
-//     if (10 == i)
-//     {
-//         g_main_loop_quit( (GMainLoop*)data );
-//         return FALSE;
-//     }
-//     if(i > 9)
-//     {
-// 		exit(1);
-// 	}
-
-//     return TRUE;
-// }
 int main(int argc, char *argv[])
 {
 	// printf("START BTHANDLER-CLI TEST \n");
@@ -1971,7 +1880,7 @@ int main(int argc, char *argv[])
 	GIOChannel *chan,*pchan;
 	gint events;
 
-	opt_sec_level = g_strdup("high");
+	opt_sec_level = g_strdup("low");
 	opt_dst_type = g_strdup("public");
 	// int count_argv_command ;
 	char *argvp,*temp;
@@ -1985,106 +1894,6 @@ int main(int argc, char *argv[])
 		cmd_help(0,0,NULL);
 		return 1;
 	}
-
-	// event_loop = g_main_loop_new(NULL, FALSE);
-	// chan = g_io_channel_unix_new(fileno(stdin));
-	// g_io_channel_set_close_on_unref(chan, TRUE);
-	// events = G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL;
-	//int c;
-
-    //        while (1) {
-    //            int this_option_optind = optind ? optind : 1;
-    //            int option_index = 0;
-    //            static struct option long_options[] = {
-    //                {"help",  	1, 0,  'h' },
-    //                {"up",  		1, 0,  'u' },
-    //                {"scan",  	1, 0,  'b' },
-    //                {"lescan",  	1, 0,  's' },
-    //                {"status",  	1, 0,  't' },
-    //                {"connect",  1, 0,  'c' },
-    //                {"write",    1, 0,  'w' },
-    //                {"dimmer",   1, 0,  'd' },
-    //                {"color",    1, 0,  'l' },
-    //                {0,  0,  0,  0 }
-    //            };
-
-    //            c = getopt_long(argc, argv, "hubstcwdl",
-    //                     long_options, &option_index);
-    //            if (c == -1)
-    //                break;
-    //            for(count_argv_command =0;count_argv_command<argc;count_argv_command ++)
-    //            {
-    //            switch (c)
-    //            	{
-				//    case 0:
-				//    break;
-				//    case 'h':
-				// 	   	printf("option 'help' %s \n",argv[1]);
-				// 	   	commands[ENUM_COMMAND_HELP].func(0,0,NULL);
-				// 	   break;
-				//    case 'u':
-				// 	   	printf("option 'hci_up': \n");
-				// 	   	commands[ENUM_COMMAND_HCI_RESET].func(dev_id,argc,argv);
-				// 	   	g_timeout_add(50,timeout_callback,event_loop);
-				// 		g_main_loop_run(event_loop);
-				// 	   break;
-				//    case 'b':
-				// 	   	printf("option 'scan': \n");
-				// 	   	commands[ENUM_COMMAND_SCAN].func(dev_id,argc,argv);
-				// 	   	g_timeout_add(50,timeout_callback,event_loop);
-				// 		g_main_loop_run(event_loop);
-				//    	   break;
-				//    case 's':
-				// 	   	printf("option 'lescan': \n");
-				// 	   	commands[ENUM_COMMAND_LESCAN].func(dev_id,argc,argv);
-				// 	   	g_timeout_add(50,timeout_callback,event_loop);
-				// 		g_main_loop_run(event_loop);
-				// 	   break;
-				//    case 't':
-				// 		printf("option 'quit' \n");
-				// 		commands[ENUM_COMMAND_STATUS].func(0,argc, argv);
-				// 		exit(1);
-				// 	   break;
-				//    case 'c':
-				// 		printf("option connect \n");
-				// 		printf("opt_dest: %s \n",argv[2]);
-				// 		commands[ENUM_COMMAND_CONNECT].func(0,argc, argv);
-				// 		g_timeout_add(100,timeout_callback,event_loop);
-				// 		g_main_loop_run(event_loop);
-				// 	   break;
-				//    case 'w':
-				// 		printf(" sending command to turn ON/OFF... \n");
-				// 		commands[ENUM_COMMAND_WRITE].func(0,argc, argv);
-				// 		g_timeout_add(50,timeout_callback,event_loop);
-				// 		g_main_loop_run(event_loop);
-				// 	   break;
-				//    case 'd':
-				// 		printf(" sending command to dim... \n");
-				// 		temp = argv[5];
-				// 		temp = strcat(temp,char_syntax_dim);
-				// 		argv[5] = strcat(char_syntax,temp );
-				// 		commands[ENUM_COMMAND_DIMMER_COLOR].func(0,argc, argv);
-				// 		g_timeout_add(50,timeout_callback,event_loop);
-				// 		g_main_loop_run(event_loop);
-				// 	   break;
-				//    case 'l':
-				// 		printf(" sending command to change color... \n");
-				// 		temp = argv[5];
-				// 		temp = strcat(temp,char_syntax_color);
-				// 		argv[5] = strcat(char_syntax,temp );
-				// 		commands[ENUM_COMMAND_DIMMER_COLOR].func(0,argc, argv);
-				// 		g_timeout_add(50,timeout_callback,event_loop);
-				// 		g_main_loop_run(event_loop);
-				// 	   break;
-			 //   	}
-			 //   break;
-			 //   }
-    // }
-    // printf("argc : %d \n", argc);
-    // printf("argv[%d]: %s \n",0,argv[0]);
-    // printf("argv[%d]: %s \n",1,argv[1]);
-    // printf("argv[%d]: %s \n",2,argv[2]);
-    // printf("argv[%d]: %s \n",3,argv[3]);
 
     argvp = *argv ;
 
@@ -2100,16 +1909,18 @@ int main(int argc, char *argv[])
 	g_option_context_add_group(context, bt_group);
 	g_option_group_add_entries(bt_group, bt_options);
 	
-	 if (opt_interactive) {
-                interactive(opt_src, opt_dst, opt_dst_type, opt_psm);
-		goto finish;
-        }
 
 	if (g_option_context_parse(context, &argc, &argv, &gerr) == FALSE) 
 	{
 		g_printerr("%s\n", gerr->message);
 		g_error_free(gerr);
 	}
+
+	if (opt_interactive) 
+	{
+        interactive(opt_src, opt_dst, opt_dst_type, opt_psm);
+		goto finish;
+     }
 
 	if(opt_bt_help)
 	{
@@ -2146,45 +1957,16 @@ int main(int argc, char *argv[])
 	{
 		commands[ENUM_COMMAND_WRITE].func(di.dev_id,argc, argv);
 	}
-	else if(opt_read)
-	{
-		commands[ENUM_COMMAND_READ].func(di.dev_id,argc, argv);
-	}
+	// else if(opt_read)
+	// {
+	// 	commands[ENUM_COMMAND_READ].func(di.dev_id,argc, argv);
+	// }
 	else
 	{
 		got_error = TRUE;;
 		goto finish;
 	}
- 	// while (argc >0)
- 	// {
- 	// 	for (i = 0; commands[i].cmd; i++) 
- 	// 	{
-		// 	if (strncmp(commands[i].cmd,
-		// 			*argv, strlen(commands[i].cmd)))
-		// 		continue;
 
-		// 	if (commands[i].cmd) {
-		// 		argc--; argv++;
-		// 	}
-
-		// 	commands[i].func(di.dev_id, argc, argv);
-		// 	cmd = 1;
-		// 	break;
-		// }
-
-		// // if (strcasecmp(commands[i].cmd, argv[0]) == 0)
-		// // {
-		// // 	printf(" commands[%d].params : %s \n",i,*argv);
-		// // 	fprintf(stderr, "Warning: unknown command - \"%s\"\n",
-		// // 			*argv);
-		// // }
-
-		// argc--; argv++;
- 	// }
-
-	// cmd_disconnect(0, NULL);
- //    fflush(stdout);
-	// g_io_channel_unref(chan);
 	if (opt_dst == NULL) 
 	{
 		g_print("Remote Bluetooth address required\n");
@@ -2200,11 +1982,7 @@ int main(int argc, char *argv[])
 		got_error = TRUE;
 		goto finish;
 	}
-	// else
-	// {
-	// 	g_io_add_watch(chan, G_IO_HUP, channel_watcher, NULL);
-	// 	printf("close io \n");
-	// }
+
 	event_loop = g_main_loop_new(NULL, FALSE);
 	g_main_loop_run(event_loop);
 	g_main_loop_unref(event_loop);
