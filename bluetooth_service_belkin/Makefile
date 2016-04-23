@@ -7,11 +7,11 @@ BLUEZ_SRCS += src/shared/crypto.c src/shared/att.c src/shared/queue.c src/shared
 BLUEZ_SRCS += src/shared/io-glib.c src/shared/timeout-glib.c
 
 IMPORT_SRCS = $(addprefix $(BLUEZ_PATH)/, $(BLUEZ_SRCS))
-SRCS_NAME = bluetooth_services
+SRCS_NAME = bt_auto_connect
 LOCAL_SRCS  = $(SRCS_NAME).c
 
 CC = gcc
-CFLAGS = -O0 -g
+CFLAGS =-g 
 
 CPPFLAGS = -DHAVE_CONFIG_H
 
@@ -19,7 +19,6 @@ CPPFLAGS += -I$(BLUEZ_PATH)/attrib -I$(BLUEZ_PATH) -I$(BLUEZ_PATH)/lib -I$(BLUEZ
 
 CPPFLAGS += `pkg-config glib-2.0 --cflags`
 LDLIBS += `pkg-config glib-2.0 --libs`
-LIBS_PATH+= -lsqlite3 
 LIBS_PATH+= -lreadline
 all: $(SRCS_NAME)
 

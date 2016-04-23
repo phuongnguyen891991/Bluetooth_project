@@ -61,12 +61,12 @@ static gchar *opt_dst_type = NULL;
 static gchar *opt_sec_level = NULL;
 
 static const int opt_psm = 0;
-static int all, opt_mtu = 0;
+static int opt_mtu = 0;
 static struct hci_dev_info di;
 
-static bt_uuid_t *opt_uuid = NULL;
-static int opt_start = 0x0001;
-static int opt_end = 0xffff;
+//static bt_uuid_t *opt_uuid = NULL;
+//static int opt_start = 0x0001;
+//static int opt_end = 0xffff;
 static int opt_handle = -1;
 static gchar *opt_value = NULL;
 
@@ -78,7 +78,7 @@ static gchar *opt_bt_status = FALSE;
 static gchar *opt_bt_help = FALSE;
 static gchar *opt_interactive = FALSE;
 static gboolean opt_write = FALSE;
-static gboolean opt_read = FALSE;
+//static gboolean opt_read = FALSE;
 static gboolean opt_listen = FALSE;
 static gboolean got_error = FALSE;
 
@@ -109,14 +109,16 @@ static GSourceFunc operation;
 
 #define BLUETOOTH_DATABASE "devicelist.db"
 
-static void cmd_interactive (int parameter, int argc,char **argvp);
+//static void cmd_interactive (int parameter, int argc,char **argvp);
 
 //sqlite3 *bluetooth_db;
-typedef struct _le_devices
+struct le_devices
 {
-    char name[50];
-    char address[50];
-}le_devices;
+    bdaddr_t bdaddr;
+    uint8_t manufacturer;
+    uint8_t status;
+    uint8_t type;
+};
 
 struct characteristic_data {
 	GAttrib *attrib;
@@ -125,6 +127,7 @@ struct characteristic_data {
 	uint16_t end;
 	bt_uuid_t uuid;
 };
+int unknown_addr = 0;
 static volatile int signal_received = 0;
 static void cmd_help(int parameter,int argc ,char **argvp);
 
@@ -155,9 +158,8 @@ static const char
   *err_CONN_FAIL = "connect fail",
   *err_COMM_ERR  = "com error",
   *err_PROTO_ERR = "protocol error",
-  *err_BAD_CMD   = "can not understand cmd",
-  *err_BAD_PARAM = "do not understand parameter",
-  *err_BAD_STATE = "badstate";
+  //*err_BAD_CMD   = "can not understand cmd",
+  *err_BAD_PARAM = "do not understand parameter";
 
 static const char 
   *st_DISCONNECTED = "disc",
@@ -440,13 +442,12 @@ static void gatts_find_info_req(const uint8_t *pdu, uint16_t len, gpointer user_
 {
 	uint8_t *opdu;
 	uint8_t opcode;
-	uint16_t starting_handle, ending_handle , olen;
+	uint16_t starting_handle , olen;
 	size_t plen;
 
 	assert( len == 5 );
 	opcode = pdu[0];
 	starting_handle = att_get_u16(&pdu[1]);
-	ending_handle = att_get_u16(&pdu[3]);
 
 	opdu = g_attrib_get_buffer(attrib, &plen);
 	olen = enc_error_resp(opcode, starting_handle, ATT_ECODE_REQ_NOT_SUPP, opdu, plen);
@@ -458,14 +459,12 @@ static void gatts_find_by_type_req(const uint8_t *pdu, uint16_t len, gpointer us
 {
 	uint8_t *opdu;
 	uint8_t opcode;
-	uint16_t starting_handle, ending_handle, att_type , olen;
+	uint16_t starting_handle, olen;
 	size_t plen;
 
 	assert( len >= 7 );
 	opcode = pdu[0];
 	starting_handle = att_get_u16(&pdu[1]);
-	ending_handle = att_get_u16(&pdu[3]);
-	att_type = att_get_u16(&pdu[5]);
 
 	opdu = g_attrib_get_buffer(attrib, &plen);
 	olen = enc_error_resp(opcode, starting_handle, ATT_ECODE_REQ_NOT_SUPP, opdu, plen);
@@ -477,16 +476,12 @@ static void gatts_read_by_type_req(const uint8_t *pdu, uint16_t len, gpointer us
 {
 	uint8_t *opdu;
 	uint8_t opcode;
-	uint16_t starting_handle, ending_handle, att_type, olen;
+	uint16_t starting_handle, olen;
 	size_t plen;
 
 	assert( len == 7 || len == 21 );
 	opcode = pdu[0];
 	starting_handle = att_get_u16(&pdu[1]);
-	ending_handle = att_get_u16(&pdu[3]);
-	if (len == 7) {
-		att_type = att_get_u16(&pdu[5]);
-	}
 
 	opdu = g_attrib_get_buffer(attrib, &plen);
 	olen = enc_error_resp(opcode, starting_handle, ATT_ECODE_REQ_NOT_SUPP, opdu, plen);
@@ -515,13 +510,12 @@ static void gatts_read_blob_req(const uint8_t *pdu, uint16_t len, gpointer user_
 {
 	uint8_t *opdu;
 	uint8_t opcode;
-	uint16_t handle, offset, olen;
+	uint16_t handle, olen;
 	size_t plen;
 
 	assert( len == 5 );
 	opcode = pdu[0];
 	handle = att_get_u16(&pdu[1]);
-	offset = att_get_u16(&pdu[3]);
 
 	opdu = g_attrib_get_buffer(attrib, &plen);
 	olen = enc_error_resp(opcode, handle, ATT_ECODE_REQ_NOT_SUPP, opdu, plen);
@@ -533,13 +527,12 @@ static void gatts_read_multi_req(const uint8_t *pdu, uint16_t len, gpointer user
 {
 	uint8_t *opdu;
 	uint8_t opcode;
-	uint16_t handle1, handle2, olen; //offset;
+	uint16_t handle1, olen; //offset;
 	size_t plen;
 
 	assert( len >= 5 );
 	opcode = pdu[0];
 	handle1 = att_get_u16(&pdu[1]);
-	handle2 = att_get_u16(&pdu[3]);
 
 	opdu = g_attrib_get_buffer(attrib, &plen);
 	olen = enc_error_resp(opcode, handle1, ATT_ECODE_REQ_NOT_SUPP, opdu, plen);
@@ -551,14 +544,12 @@ static void gatts_read_by_group_req(const uint8_t *pdu, uint16_t len, gpointer u
 {
 	uint8_t *opdu;
 	uint8_t opcode;
-	uint16_t starting_handle, ending_handle, att_group_type, olen;
+	uint16_t starting_handle, olen;
 	size_t plen;
 
 	assert( len >= 7 );
 	opcode = pdu[0];
 	starting_handle = att_get_u16(&pdu[1]);
-	ending_handle = att_get_u16(&pdu[3]);
-	att_group_type = att_get_u16(&pdu[5]);
 
 	opdu = g_attrib_get_buffer(attrib, &plen);
 	olen = enc_error_resp(opcode, starting_handle, ATT_ECODE_REQ_NOT_SUPP, opdu, plen);
@@ -607,13 +598,12 @@ static void gatts_prep_write_req(const uint8_t *pdu, uint16_t len, gpointer user
 {
 	uint8_t *opdu;
 	uint8_t opcode;
-	uint16_t handle, offset, olen;
+	uint16_t handle, olen;
 	size_t plen;
 
 	assert( len >= 5 );
 	opcode = pdu[0];
 	handle = att_get_u16(&pdu[1]);
-	offset = att_get_u16(&pdu[3]);
 
 	opdu = g_attrib_get_buffer(attrib, &plen);
 	olen = enc_error_resp(opcode, handle, ATT_ECODE_REQ_NOT_SUPP, opdu, plen);
@@ -897,11 +887,12 @@ static void sigint_handler(int sig)
 {
 	signal_received = sig;
 }
-static void eir_parse_name(uint8_t *eir, size_t eir_len,
+
+struct le_devices eir_parse_name(uint8_t *eir, size_t eir_len,
 						char *buf, size_t buf_len)
 {
 	size_t offset;
-
+	struct le_devices devices;
 	offset = 0;
 	while (offset < eir_len) {
 		uint8_t field_len = eir[0];
@@ -917,12 +908,60 @@ static void eir_parse_name(uint8_t *eir, size_t eir_len,
 		switch (eir[1]) {
 		case EIR_NAME_SHORT:
 		case EIR_NAME_COMPLETE:
+		{
 			name_len = field_len - 1;
 			if (name_len > buf_len)
 				goto failed;
 
 			memcpy(buf, &eir[2], name_len);
+			int i;
+		    for(i=1; i<field_len; i++)
+		    {
+		      printf("\tData: 0x%0X\n", eir[i]);
+		    }
 			return;
+		}
+		case EIR_FLAGS:
+		{
+			printf("Flag type: len=%02X\n", field_len);
+		    int i;
+		    for(i=1; i<field_len; i++)
+		    {
+		      printf("\tFlag data: 0x%0X\n", eir[i]);
+		    }
+		    break;
+		}
+		case EIR_UUID16_SOME:
+		case EIR_UUID16_ALL:
+		case EIR_UUID32_SOME:
+		case EIR_TX_POWER:
+		case EIR_APPERANCE:
+		case EIR_SLAVE_CONN_INTVAL:
+		case EIR_UUID128_ALL:
+		case EIR_MANUFACTURE_SPECIFIC:
+		{
+			printf("type: %02X len: %02X \n",eir[1],field_len);
+		    int i;
+		    for(i=2; i<field_len; i++)
+		    {
+		      printf("\tData: 0x%0X\n", eir[i]);
+		    }
+		    if(EIR_MANUFACTURE_SPECIFIC)
+		    {
+			    if( (eir[3] << 8 | eir[2]) == 0x005C )
+			    {
+
+			    	//check_configure(eir[field_len-6],eir[field_len-5]);
+			    	devices.manufacturer = 0x005C;
+			    	devices.status = eir[field_len-6];
+			    	devices.type = eir[field_len-5];
+			    	//printf("manufacturer: %02X ",devices->manufacturer);
+			    	//cmd_interactive ( 0, 0, NULL);
+			    }
+			}
+		    break;
+		}
+
 		}
 
 		offset += field_len + 1;
@@ -931,6 +970,7 @@ static void eir_parse_name(uint8_t *eir, size_t eir_len,
 
 failed:
 	snprintf(buf, buf_len, "(unknown)");
+	return devices;
 }
 
 void process_data(uint8_t *data, size_t data_len, le_advertising_info *info)
@@ -995,7 +1035,7 @@ void process_data(uint8_t *data, size_t data_len, le_advertising_info *info)
 
 #define BELKIN 0x005C
 
- void check_configure(int devices_type, int devices_status)
+void check_configure(int devices_type, int devices_status)
 {
 	printf("check configure \n");
 	// int devices_type;
@@ -1004,7 +1044,7 @@ void process_data(uint8_t *data, size_t data_len, le_advertising_info *info)
 	// devices_type = strtohandle(str_devices_type);
 	// devices_status = strtohandle(str_devices_type);
 
-		printf("manufacture: %02X \n",devices_type);
+		printf("Type: %02X \n",devices_type);
 
 	switch(devices_status)
 	{
@@ -1020,14 +1060,43 @@ void process_data(uint8_t *data, size_t data_len, le_advertising_info *info)
 			}
 		default:
 			{
-				printf("revesed");
+				printf("reserved\n");
 				break;
 			}
 
 	}
 }
+static gboolean channel_watcher(GIOChannel *chan, GIOCondition cond,
+				gpointer user_data)
+{
+	disconnect_io();
+
+	return FALSE;
+}
+static void le_connect(char *opt_dst )
+{
+	GError *gerr = NULL;
+
+	if (opt_dst == NULL) {
+		//error("Remote Bluetooth address required\n");
+		resp_error(err_BAD_PARAM);
+		return;
+	}
+
+	set_state(STATE_CONNECTING);
+	iochannel = gatt_connect(opt_src, opt_dst, opt_dst_type, opt_sec_level,
+						opt_psm, opt_mtu, connect_cb,&gerr);
+
+
+	if (iochannel == NULL)
+		set_state(STATE_DISCONNECTED);
+
+	else
+		g_io_add_watch(iochannel, G_IO_HUP, channel_watcher, NULL);
+}
 static int print_advertising_devices(int dd, uint8_t filter_type)
 {
+	struct le_devices le_devices;
 	unsigned char buf[HCI_MAX_EVENT_SIZE], *ptr;
 	struct hci_filter nf, of;
 	struct sigaction sa;
@@ -1061,9 +1130,6 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 		evt_le_meta_event *meta;
 		le_advertising_info *info;
 		char addr[18];
-		char evt_type[18];
-
-		uint8_t str_data[512];
 
 		 if (to) {
               struct pollfd p;
@@ -1108,31 +1174,55 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 
 		/* Ignoring multiple reports */
 		info = (le_advertising_info *) (meta->data + 1);
-	      if(info->length == 0)
-	      {
-	        continue;
-	      }
 
-	      int current_index = 0;
-	      int data_error = 0;
+		if (check_report_filter(filter_type, info)) {
+			char name[30];
+			//memset(name, 0, sizeof(name));
+			memset(name, 0, sizeof(name));
+			//ba2str(&info->bdaddr, addr);
+			le_devices.bdaddr = info->bdaddr;
+			ba2str(&le_devices.bdaddr, addr);
+			//strcpy(le_devices->name,name);
 
-	      while(!data_error && current_index < info->length)
-	      {
-	        size_t data_len = info->data[current_index];
+			le_devices = eir_parse_name(info->data, info->length,
+							name, sizeof(name) - 1);
 
-	        if(data_len + 1 > info->length)
-	        {
-	          printf("EIR data length is longer than EIR packet length. %d + 1 > %d", data_len, info->length);
-	          data_error = 1;
-	        }
-	        else
-	        {
-	          process_data(info->data + current_index + 1, data_len, info);
-	          //get_rssi(&info->bdaddr, current_hci_state);
-	          current_index += data_len + 1;
-	        }
-	      }
-		printf("+++++++++++++++++++++\n");
+			printf("%s %s\n", addr,name);
+			if(le_devices.manufacturer == 0x005C)
+			{
+			printf("le_devices.manufacture: %02X \n",le_devices.manufacturer);
+			check_configure(le_devices.type,le_devices.status);
+			opt_dst = addr;
+			le_connect(addr);
+			g_main_loop_run(event_loop);
+			}
+			printf("--------\n");
+		}
+	      // if(info->length == 0)
+	      // {
+	      //   continue;
+	      // }
+
+	      // int current_index = 0;
+	      // int data_error = 0;
+
+	 //      while(!data_error && current_index < info->length)
+	 //      {
+	 //        size_t data_len = info->data[current_index];
+
+	 //        if(data_len + 1 > info->length)
+	 //        {
+	 //          printf("EIR data length is longer than EIR packet length. %d + 1 > %d", data_len, info->length);
+	 //          data_error = 1;
+	 //        }
+	 //        else
+	 //        {
+	 //          process_data(info->data + current_index + 1, data_len, info);
+	 //          //get_rssi(&info->bdaddr, current_hci_state);
+	 //          current_index += data_len + 1;
+	 //        }
+	 //      }
+		 //printf("+++++++++++++++++++++\n");
 	}
 done:
 	setsockopt(dd, SOL_HCI, HCI_FILTER, &of, sizeof(of));
@@ -1268,7 +1358,7 @@ static void * lescan_bt_devices(int dev_id, int argc, char **argv)
 			break;
 		default:
 			printf("%s", lescan_help);
-			return;
+			//return(0);
 		}
 	}
 
@@ -1318,18 +1408,6 @@ static void cmd_lescan (int dev_id,int argc ,char **argvp)
 {
 	lescan_bt_devices(dev_id,argc,argvp);
 }
-static void cmd_exit(int parameter, int argcp, char **argvp)
-{
-	g_main_loop_quit(event_loop);
-}
-
-static gboolean channel_watcher(GIOChannel *chan, GIOCondition cond,
-				gpointer user_data)
-{
-	disconnect_io();
-
-	return FALSE;
-}
 
 static void cmd_connect(int parameter ,int argcp, char **argvp)
 {
@@ -1350,7 +1428,7 @@ static void cmd_connect(int parameter ,int argcp, char **argvp)
 	}
 
 	if (opt_dst == NULL) {
-		error("Remote Bluetooth address required\n");
+		//error("Remote Bluetooth address required\n");
 		resp_error(err_BAD_PARAM);
 		return;
 	}
@@ -1365,11 +1443,6 @@ static void cmd_connect(int parameter ,int argcp, char **argvp)
 
 	else
 		g_io_add_watch(iochannel, G_IO_HUP, channel_watcher, NULL);
-}
-
-static void cmd_disconnect(int argcp, char **argvp)
-{
-	disconnect_io();
 }
 
  int strtohandle(const char *src)
@@ -1481,345 +1554,6 @@ static void cmd_char_write(int parameter ,int argcp, char **argvp)
   operation = cmd_char_write_common ;
 }
 
-static void char_read_cb(guint8 status, const guint8 *pdu, guint16 plen,
-							gpointer user_data)
-{
-	uint8_t value[plen];
-	ssize_t vlen;
-	int i;
-
-	if (status != 0) {
-		g_printerr("Characteristic value/descriptor read failed: %s\n",
-							att_ecode2str(status));
-		goto done;
-	}
-
-	vlen = dec_read_resp(pdu, plen, value, sizeof(value));
-	if (vlen < 0) {
-		g_printerr("Protocol error\n");
-		goto done;
-	}
-	g_print("Characteristic value/descriptor: ");
-	for (i = 0; i < vlen; i++)
-		g_print("%02x ", value[i]);
-	g_print("\n");
-
-done:
-	if (!opt_listen)
-		g_main_loop_quit(event_loop);
-}
-
-static void char_read_by_uuid_cb(guint8 status, const guint8 *pdu,
-					guint16 plen, gpointer user_data)
-{
-	struct att_data_list *list;
-	int i;
-
-	if (status != 0) {
-		g_printerr("Read characteristics by UUID failed: %s\n",
-							att_ecode2str(status));
-		goto done;
-	}
-
-	list = dec_read_by_type_resp(pdu, plen);
-	if (list == NULL)
-		goto done;
-
-	for (i = 0; i < list->num; i++) {
-		uint8_t *value = list->data[i];
-		int j;
-
-		g_print("handle: 0x%04x \t value: ", att_get_u16(value));
-		value += 2;
-		for (j = 0; j < list->len - 2; j++, value++)
-			g_print("%02x ", *value);
-		g_print("\n");
-	}
-
-	att_data_list_free(list);
-
-done:
-	g_main_loop_quit(event_loop);
-}
-
-static gboolean cmd_char_read_common(gpointer user_data)
-{
-	GAttrib *attrib = user_data;
-
-	if (opt_uuid != NULL) {
-		struct characteristic_data *char_data;
-
-		char_data = g_new(struct characteristic_data, 1);
-		char_data->attrib = attrib;
-		char_data->start = opt_start;
-		char_data->end = opt_end;
-
-		gatt_read_char_by_uuid(attrib, opt_start, opt_end, opt_uuid,
-						char_read_by_uuid_cb, char_data);
-
-		return FALSE;
-	}
-
-	if (opt_handle <= 0) {
-		g_printerr("A valid handle is required\n");
-		g_main_loop_quit(event_loop);
-		return FALSE;
-	}
-
-	gatt_read_char(attrib, opt_handle, char_read_cb, attrib);
-
-	return FALSE;
-}
-
-static void cmd_char_read(int parameter ,int argcp, char **argvp)
-{
-  operation = cmd_char_read_common ;
-}
-static void cmd_sec_level(int argcp, char **argvp)
-{
-	GError *gerr = NULL;
-	BtIOSecLevel sec_level;
-
-	if (argcp < 2) {
-		resp_error(err_BAD_PARAM);
-		return;
-	}
-
-	if (strcasecmp(argvp[1], "medium") == 0)
-		sec_level = BT_IO_SEC_MEDIUM;
-	else if (strcasecmp(argvp[1], "high") == 0)
-		sec_level = BT_IO_SEC_HIGH;
-	else if (strcasecmp(argvp[1], "low") == 0)
-		sec_level = BT_IO_SEC_LOW;
-	else {
-		resp_error(err_BAD_PARAM);
-		return;
-	}
-
-	g_free(opt_sec_level);
-	opt_sec_level = g_strdup(argvp[1]);
-
-	if (conn_state != STATE_CONNECTED)
-		return;
-
-	assert(!opt_psm);
-
-	bt_io_set(iochannel, &gerr,
-			BT_IO_OPT_SEC_LEVEL, sec_level,
-			BT_IO_OPT_INVALID);
-	if (gerr) {
-		printf("# Error: %s\n", gerr->message);
-                resp_error(err_COMM_ERR);
-		g_error_free(gerr);
-	}
-	else {
-		/* Tell bluepy the security level
-		 * has been changed successfuly */
-		cmd_status(0,0, NULL);
-        }
-}
-
-static void exchange_mtu_cb(guint8 status, const guint8 *pdu, guint16 plen,
-							gpointer user_data)
-{
-	uint16_t mtu;
-
-	if (status != 0) {
-		resp_error(err_COMM_ERR); // Todo: status
-		return;
-	}
-
-	if (!dec_mtu_resp(pdu, plen, &mtu)) {
-		resp_error(err_PROTO_ERR);
-		return;
-	}
-
-	mtu = MIN(mtu, opt_mtu);
-	/* Set new value for MTU in client */
-	if (g_attrib_set_mtu(attrib, mtu))
-        {
-                opt_mtu = mtu;
-		cmd_status(0,0, NULL);
-        }
-	else
-        {
-		printf("# Error exchanging MTU\n");
-		resp_error(err_COMM_ERR);
-        }
-}
-
-static void cmd_mtu(int argcp, char **argvp)
-{
-	if (conn_state != STATE_CONNECTED) {
-		resp_error(err_BAD_STATE);
-		return;
-	}
-
-	assert(!opt_psm);
-
-	if (argcp < 2) {
-		resp_error(err_BAD_PARAM);
-		return;
-	}
-
-	if (opt_mtu) {
-		resp_error(err_BAD_STATE);
-                /* Can only set once per connection */
-		return;
-	}
-
-	errno = 0;
-	opt_mtu = strtoll(argvp[1], NULL, 16);
-	if (errno != 0 || opt_mtu < ATT_DEFAULT_LE_MTU) {
-		resp_error(err_BAD_PARAM);
-		return;
-	}
-
-	gatt_exchange_mtu(attrib, opt_mtu, exchange_mtu_cb, NULL);
-}
-
-static void cmd_lecc(int dev_id, int argc, char **argv)
-{
-	int err, opt, dd;
-	bdaddr_t bdaddr;
-	uint16_t interval, latency, max_ce_length, max_interval, min_ce_length;
-	uint16_t min_interval, supervision_timeout, window, handle;
-	uint8_t initiator_filter, own_bdaddr_type, peer_bdaddr_type;
-
-	own_bdaddr_type = LE_PUBLIC_ADDRESS;
-	peer_bdaddr_type = LE_PUBLIC_ADDRESS;
-	initiator_filter = 0; /* Use peer address */
-
-	// for_each_opt(opt, lecc_options, NULL) {
-	// 	switch (opt) {
-	// 	case 's':
-	// 		own_bdaddr_type = LE_RANDOM_ADDRESS;
-	// 		break;
-	// 	case 'r':
-	// 		peer_bdaddr_type = LE_RANDOM_ADDRESS;
-	// 		break;
-	// 	case 'w':
-	// 		initiator_filter = 0x01; /* Use white list */
-	// 		break;
-	// 	default:
-	// 		printf("%s", lecc_help);
-	// 		return;
-	// 	}
-	// }
-	//helper_arg(0, 1, &argc, &argv, lecc_help);
-
-	if (dev_id < 0)
-		dev_id = hci_get_route(NULL);
-
-	dd = hci_open_dev(dev_id);
-	if (dd < 0) {
-		perror("Could not open device");
-		exit(1);
-	}
-
-	memset(&bdaddr, 0, sizeof(bdaddr_t));
-	if (argv[0])
-		str2ba(argv[0], &bdaddr);
-
-	interval = htobs(0x0004);
-	window = htobs(0x0004);
-	min_interval = htobs(0x000F);
-	max_interval = htobs(0x000F);
-	latency = htobs(0x0000);
-	supervision_timeout = htobs(0x0C80);
-	min_ce_length = htobs(0x0001);
-	max_ce_length = htobs(0x0001);
-
-	err = hci_le_create_conn(dd, interval, window, initiator_filter,
-			peer_bdaddr_type, bdaddr, own_bdaddr_type, min_interval,
-			max_interval, latency, supervision_timeout,
-			min_ce_length, max_ce_length, &handle, 25000);
-	if (err < 0) {
-		perror("Could not create connection");
-		exit(1);
-	}
-
-	printf("Connection handle %d\n", handle);
-
-	hci_close_dev(dd);
-}
-
-static void cmd_lecup(int dev_id, int argc, char **argv)
-{
-	uint16_t handle = 0, min, max, latency, timeout;
-	int opt, dd;
-	int options = 0;
-
-	/* Aleatory valid values */
-	min = 0x0C8;
-	max = 0x0960;
-	latency = 0x0007;
-	timeout = 0x0C80;
-
-	// for_each_opt(opt, lecup_options, NULL) {
-	// 	switch (opt) {
-	// 	case 'H':
-	// 		handle = strtoul(optarg, NULL, 0);
-	// 		break;
-	// 	case 'm':
-	// 		min = strtoul(optarg, NULL, 0);
-	// 		break;
-	// 	case 'M':
-	// 		max = strtoul(optarg, NULL, 0);
-	// 		break;
-	// 	case 'l':
-	// 		latency = strtoul(optarg, NULL, 0);
-	// 		break;
-	// 	case 't':
-	// 		timeout = strtoul(optarg, NULL, 0);
-	// 		break;
-	// 	default:
-	// 		printf("%s", lecup_help);
-	// 		return;
-	// 	}
-
-	// 	options = 1;
-	// }
-
-	if (options == 0) {
-		//helper_arg(5, 5, &argc, &argv, lecup_help);
-
-		handle = strtoul(argv[0], NULL, 0);
-		min = strtoul(argv[1], NULL, 0);
-		max = strtoul(argv[2], NULL, 0);
-		latency = strtoul(argv[3], NULL, 0);
-		timeout = strtoul(argv[4], NULL, 0);
-	}
-
-	if (handle == 0) {
-		//printf("%s", lecup_help);
-		return;
-	}
-
-	if (dev_id < 0)
-		dev_id = hci_get_route(NULL);
-
-	dd = hci_open_dev(dev_id);
-	if (dd < 0) {
-		fprintf(stderr, "HCI device open failed\n");
-		exit(1);
-	}
-
-	if (hci_le_conn_update(dd, htobs(handle), htobs(min), htobs(max),
-				htobs(latency), htobs(timeout), 5000) < 0) {
-		int err = -errno;
-		fprintf(stderr, "Could not change connection params: %s(%d)\n",
-							strerror(-err), -err);
-	}
-
-	hci_close_dev(dd);
-}
-
-static void cmd_interactive (int parameter, int argc, char **argvp)
-{
-	interactive(opt_src, opt_dst, g_strdup("public"), opt_psm);
-}
-
 enum ENUM_COMMAND{
 
 	ENUM_COMMAND_HELP = 0,
@@ -1899,17 +1633,12 @@ int main(int argc, char *argv[])
 	GOptionContext *context;
 	GOptionGroup *bt_group;
 	GError *gerr = NULL;
-	GIOChannel *chan,*pchan;
-	gint events;
+	GIOChannel *pchan;
 
 	opt_sec_level = g_strdup("low");
 	opt_dst_type = g_strdup("public");
 	// int count_argv_command ;
-	char *argvp,*temp;
-	char char_syntax[] = "56";
-	char char_syntax_dim[]= "0faa";
-	char char_syntax_color[] = "00f0aa";
-	 int i , cmd = 0;
+	char *argvp;
 
 	if(argc <= 1)
 	{
