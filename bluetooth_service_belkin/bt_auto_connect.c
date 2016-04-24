@@ -1,3 +1,4 @@
+
 /*
   *  BlueZ - Bluetooth protocol stack for Linux
  *
@@ -953,8 +954,8 @@ struct le_devices eir_parse_name(uint8_t *eir, size_t eir_len,
 
 			    	//check_configure(eir[field_len-6],eir[field_len-5]);
 			    	devices.manufacturer = 0x005C;
-			    	devices.status = eir[field_len-6];
-			    	devices.type = eir[field_len-5];
+			    	devices.status = eir[field_len];
+			    	devices.type = eir[field_len-1];
 			    	//printf("manufacturer: %02X ",devices->manufacturer);
 			    	//cmd_interactive ( 0, 0, NULL);
 			    }

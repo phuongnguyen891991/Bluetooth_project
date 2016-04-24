@@ -168,7 +168,7 @@ static void advertise_start(void)
         }
 
 	adv_data_cp.data[adv_data_cp.length + segment_length] = htobs(LINKSYS_DEV); segment_length++;
-	adv_data_cp.data[adv_data_cp.length + segment_length] = htobs(DEV_UNCONFIGURED); segment_length++;
+	adv_data_cp.data[adv_data_cp.length + segment_length] = htobs(DEV_CONFIGURED); segment_length++;
 	adv_data_cp.data[adv_data_cp.length] = htobs(segment_length - 1);
 	adv_data_cp.length += segment_length;
 
