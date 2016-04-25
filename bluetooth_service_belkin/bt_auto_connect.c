@@ -84,7 +84,7 @@ static gboolean opt_listen = FALSE;
 static gboolean got_error = FALSE;
 
 static GSourceFunc operation;
-
+gpointer user_data;
 #define for_each_opt(opt, long, short) while ((opt=getopt_long(argc, argv, short ? short:"+", long, NULL)) != -1)
 
 #define LE_LINK		0x03
@@ -112,6 +112,9 @@ static GSourceFunc operation;
 
 //static void cmd_interactive (int parameter, int argc,char **argvp);
 
+static void char_write_req_cb(guint8 status, const guint8 *pdu, guint16 plen,
+							gpointer user_data);
+static gboolean char_write_auto( gpointer user_data);
 //sqlite3 *bluetooth_db;
 struct le_devices
 {
@@ -974,66 +977,6 @@ failed:
 	return devices;
 }
 
-void process_data(uint8_t *data, size_t data_len, le_advertising_info *info)
-{
-	char addr[18];
-  // printf("Test: %p and %d\n", data, data_len);
-  if(data[0] == EIR_NAME_SHORT || data[0] == EIR_NAME_COMPLETE)
-  {
-    size_t name_len = data_len - 1;
-    char *name = malloc(name_len + 1);
-    memset(name, 0, name_len + 1);
-    memcpy(name, &data[2], name_len);
-
-    ba2str(&info->bdaddr, addr);
-
-    printf("MAC = %s \nNAME = %s\n", addr, name);
-    printf("type: %02X len: %02X \n",data[0],data_len);
-    int i;
-    for(i=1; i<data_len; i++)
-    {
-      printf("\tData: 0x%0X\n", data[i]);
-    }
-
-    free(name);
-  }
-  else if(data[0] == EIR_FLAGS)
-  {
-    printf("Flag type: len=%02X\n", data_len);
-    int i;
-    for(i=1; i<data_len; i++)
-    {
-      printf("\tFlag data: 0x%0X\n", data[i]);
-    }
-  }
-  else if(data[0] == EIR_UUID16_SOME || data[0] ==  EIR_UUID16_ALL
-	|| data[0] == EIR_UUID32_SOME || data[0] == EIR_TX_POWER
-	|| data[0] == EIR_APPERANCE || data[0] == EIR_SLAVE_CONN_INTVAL
-	|| data[0] == EIR_UUID128_ALL || data[0] == EIR_MANUFACTURE_SPECIFIC )
-  {
-    //printf("Manufacture specific type: len=%d\n", data_len);
-	printf("type: %02X len: %02X \n",data[0],data_len);
-	//uint16_t data_tmp[data_len+1];
-	//uint16_t manufacturer;
-    int i;
-
-    for(i=1; i<data_len; i++)
-    {
-      printf("\tData: 0x%0X\n", data[i]);
-    }
-    if( (data[2] << 8 | data[1]) == 0x005C )
-    {
-    	opt_dst = addr;
-    	check_configure(data[data_len-6],data[data_len-7]);
-    	//cmd_interactive ( 0, 0, NULL);
-    }
-  }
-  else
-  {
-    printf("Unknown type: type=%X\n", data[0]);
-  }
-}
-
 #define BELKIN 0x005C
 
 void check_configure(int devices_type, int devices_status)
@@ -1070,24 +1013,29 @@ void check_configure(int devices_type, int devices_status)
 static gboolean channel_watcher(GIOChannel *chan, GIOCondition cond,
 				gpointer user_data)
 {
+	if(chan == iochannel)
 	disconnect_io();
 
 	return FALSE;
 }
-static void le_connect(char *opt_dst )
+static void le_connect(gpointer user_data )
 {
 	GError *gerr = NULL;
+	uint8_t *value;
+	size_t len;
+	opt_value="68";
 
 	if (opt_dst == NULL) {
-		//error("Remote Bluetooth address required\n");
+		error("Remote Bluetooth address required\n");
 		resp_error(err_BAD_PARAM);
 		return;
 	}
-
+	len = gatt_attr_data_from_string(opt_value, &value);
 	set_state(STATE_CONNECTING);
 	iochannel = gatt_connect(opt_src, opt_dst, opt_dst_type, opt_sec_level,
 						opt_psm, opt_mtu, connect_cb,&gerr);
 
+	gatt_write_char(attrib,0x0017,value,len,char_write_req_cb,NULL);
 
 	if (iochannel == NULL)
 		set_state(STATE_DISCONNECTED);
@@ -1095,9 +1043,10 @@ static void le_connect(char *opt_dst )
 	else
 		g_io_add_watch(iochannel, G_IO_HUP, channel_watcher, NULL);
 }
+struct le_devices le_devices;
 static int print_advertising_devices(int dd, uint8_t filter_type)
 {
-	struct le_devices le_devices;
+	
 	unsigned char buf[HCI_MAX_EVENT_SIZE], *ptr;
 	struct hci_filter nf, of;
 	struct sigaction sa;
@@ -1193,9 +1142,10 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 			{
 			printf("le_devices.manufacture: %02X \n",le_devices.manufacturer);
 			check_configure(le_devices.type,le_devices.status);
-			opt_dst = addr;
-			le_connect(addr);
-			g_main_loop_run(event_loop);
+			opt_dst = g_strdup(addr);
+			// le_connect(user_data);
+			// g_main_loop_run(event_loop);
+			goto done;
 			}
 			printf("--------\n");
 		}
@@ -1402,7 +1352,12 @@ static void * lescan_bt_devices(int dev_id, int argc, char **argv)
 	}
 	printf("LE Scan finish ! \n");
 	hci_close_dev(dd);
+	printf("opt_dst: %s\n",opt_dst);
+	le_connect(user_data);	
 	
+	operation = char_write_auto;
+	g_main_loop_run(event_loop);
+
 }
 
 static void cmd_lescan (int dev_id,int argc ,char **argvp)
@@ -1437,7 +1392,6 @@ static void cmd_connect(int parameter ,int argcp, char **argvp)
 	set_state(STATE_CONNECTING);
 	iochannel = gatt_connect(opt_src, opt_dst, opt_dst_type, opt_sec_level,
 						opt_psm, opt_mtu, connect_cb,&gerr);
-
 
 	if (iochannel == NULL)
 		set_state(STATE_DISCONNECTED);
@@ -1519,6 +1473,27 @@ done:
 
 // 	g_free(value);
 // }
+static gboolean char_write_auto(gpointer user_data)
+{
+	GAttrib *attrib = user_data;
+	uint8_t *value ;
+	size_t len;
+	opt_value = "68";
+
+	len = gatt_attr_data_from_string(opt_value, &value);
+	if (len == 0) {
+		g_printerr("Invalid value\n");
+		goto error;
+	}
+
+	gatt_write_cmd(attrib, 0x0017, value, len, NULL,
+									NULL);
+	return FALSE ;
+
+error:
+	g_main_loop_quit(event_loop);
+	return FALSE ;
+}
 static gboolean cmd_char_write_common(gpointer user_data)
 {
 	GAttrib *attrib = user_data;
@@ -1694,21 +1669,21 @@ int main(int argc, char *argv[])
 		commands[ENUM_COMMAND_SCAN].func(di.dev_id, argc, argv);
 		exit(1);
 	}
-	else if(opt_bt_lescan)
-	{
-		commands[ENUM_COMMAND_LESCAN].func(di.dev_id, argc, argv);
-		exit(1);
-	}
 	else if(opt_bt_status)
 	{
 		commands[ENUM_COMMAND_STATUS].func(di.dev_id, argc, argv);
 		exit(1);
 	}
-
-	else if(opt_write)
+	else if(opt_bt_lescan)
 	{
-		commands[ENUM_COMMAND_WRITE].func(di.dev_id,argc, argv);
+		commands[ENUM_COMMAND_LESCAN].func(di.dev_id, argc, argv);
+		// exit(1)
+		printf("end.............\n");
 	}
+	// else if(opt_write)
+	// {
+	// 	commands[ENUM_COMMAND_WRITE].func(di.dev_id,argc, argv);
+	// }
 	// else if(opt_read)
 	// {
 	// 	commands[ENUM_COMMAND_READ].func(di.dev_id,argc, argv);
@@ -1726,7 +1701,7 @@ int main(int argc, char *argv[])
 		goto finish;
 	}
 
-	printf("opt_dst: %s",opt_dst);
+	printf("opt_dst: %s\n",opt_dst);
 	pchan = gatt_connect(opt_src, opt_dst, opt_dst_type, opt_sec_level,
 					opt_psm, opt_mtu, connect_cb,&gerr);
 	if (pchan == NULL) 
