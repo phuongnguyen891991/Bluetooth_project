@@ -1023,19 +1023,22 @@ static void le_connect(gpointer user_data )
 	GError *gerr = NULL;
 	uint8_t *value;
 	size_t len;
-	opt_value="68";
+	// char* str_value="68656c6c6f";
 
 	if (opt_dst == NULL) {
 		error("Remote Bluetooth address required\n");
 		resp_error(err_BAD_PARAM);
 		return;
 	}
-	len = gatt_attr_data_from_string(opt_value, &value);
+	// len = gatt_attr_data_from_string(str_value, &value);
 	set_state(STATE_CONNECTING);
 	iochannel = gatt_connect(opt_src, opt_dst, opt_dst_type, opt_sec_level,
 						opt_psm, opt_mtu, connect_cb,&gerr);
 
-	gatt_write_char(attrib,0x0017,value,len,char_write_req_cb,NULL);
+	// printf("str_value: %s\n",str_value );;
+	// printf("value: %02X \n",*value);
+
+	// gatt_write_char(attrib,0x0017,value,len,char_write_req_cb,NULL);
 
 	if (iochannel == NULL)
 		set_state(STATE_DISCONNECTED);
@@ -1478,15 +1481,15 @@ static gboolean char_write_auto(gpointer user_data)
 	GAttrib *attrib = user_data;
 	uint8_t *value ;
 	size_t len;
-	opt_value = "68";
+	char *str_value = "68656c6c6f";
 
-	len = gatt_attr_data_from_string(opt_value, &value);
+	len = gatt_attr_data_from_string(str_value, &value);
 	if (len == 0) {
 		g_printerr("Invalid value\n");
 		goto error;
 	}
-
-	gatt_write_cmd(attrib, 0x0017, value, len, NULL,
+	printf("str_value: %s \n",str_value);
+	gatt_write_char(attrib, 0x0017, value, len, char_write_req_cb,
 									NULL);
 	return FALSE ;
 
@@ -1667,7 +1670,7 @@ int main(int argc, char *argv[])
 	else if(opt_bt_scan)
 	{
 		commands[ENUM_COMMAND_SCAN].func(di.dev_id, argc, argv);
-		exit(1);
+		// exit(1);
 	}
 	else if(opt_bt_status)
 	{
