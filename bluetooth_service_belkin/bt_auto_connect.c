@@ -85,6 +85,7 @@ static gboolean got_error = FALSE;
 
 static GSourceFunc operation;
 gpointer user_data;
+uint8_t flag_connect = 0;
 #define for_each_opt(opt, long, short) while ((opt=getopt_long(argc, argv, short ? short:"+", long, NULL)) != -1)
 
 #define LE_LINK		0x03
@@ -1023,22 +1024,15 @@ static void le_connect(gpointer user_data )
 	GError *gerr = NULL;
 	uint8_t *value;
 	size_t len;
-	// char* str_value="68656c6c6f";
 
 	if (opt_dst == NULL) {
 		error("Remote Bluetooth address required\n");
 		resp_error(err_BAD_PARAM);
 		return;
 	}
-	// len = gatt_attr_data_from_string(str_value, &value);
 	set_state(STATE_CONNECTING);
 	iochannel = gatt_connect(opt_src, opt_dst, opt_dst_type, opt_sec_level,
 						opt_psm, opt_mtu, connect_cb,&gerr);
-
-	// printf("str_value: %s\n",str_value );;
-	// printf("value: %02X \n",*value);
-
-	// gatt_write_char(attrib,0x0017,value,len,char_write_req_cb,NULL);
 
 	if (iochannel == NULL)
 		set_state(STATE_DISCONNECTED);
@@ -1046,6 +1040,7 @@ static void le_connect(gpointer user_data )
 	else
 		g_io_add_watch(iochannel, G_IO_HUP, channel_watcher, NULL);
 }
+
 struct le_devices le_devices;
 static int print_advertising_devices(int dd, uint8_t filter_type)
 {
@@ -1143,40 +1138,17 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 			printf("%s %s\n", addr,name);
 			if(le_devices.manufacturer == 0x005C)
 			{
-			printf("le_devices.manufacture: %02X \n",le_devices.manufacturer);
-			check_configure(le_devices.type,le_devices.status);
-			opt_dst = g_strdup(addr);
-			// le_connect(user_data);
-			// g_main_loop_run(event_loop);
-			goto done;
+				if(le_devices.status == 0x00)
+				{
+					flag_connect = 1;
+					printf("le_devices.manufacture: %02X \n",le_devices.manufacturer);
+					check_configure(le_devices.type,le_devices.status);
+					opt_dst = g_strdup(addr);
+					goto done;
+				}
 			}
 			printf("--------\n");
 		}
-	      // if(info->length == 0)
-	      // {
-	      //   continue;
-	      // }
-
-	      // int current_index = 0;
-	      // int data_error = 0;
-
-	 //      while(!data_error && current_index < info->length)
-	 //      {
-	 //        size_t data_len = info->data[current_index];
-
-	 //        if(data_len + 1 > info->length)
-	 //        {
-	 //          printf("EIR data length is longer than EIR packet length. %d + 1 > %d", data_len, info->length);
-	 //          data_error = 1;
-	 //        }
-	 //        else
-	 //        {
-	 //          process_data(info->data + current_index + 1, data_len, info);
-	 //          //get_rssi(&info->bdaddr, current_hci_state);
-	 //          current_index += data_len + 1;
-	 //        }
-	 //      }
-		 //printf("+++++++++++++++++++++\n");
 	}
 done:
 	setsockopt(dd, SOL_HCI, HCI_FILTER, &of, sizeof(of));
@@ -1356,10 +1328,13 @@ static void * lescan_bt_devices(int dev_id, int argc, char **argv)
 	printf("LE Scan finish ! \n");
 	hci_close_dev(dd);
 	printf("opt_dst: %s\n",opt_dst);
+	if(flag_connect == 1)
+	{
 	le_connect(user_data);	
 	
 	operation = char_write_auto;
 	g_main_loop_run(event_loop);
+	}
 
 }
 
@@ -1488,7 +1463,6 @@ static gboolean char_write_auto(gpointer user_data)
 		g_printerr("Invalid value\n");
 		goto error;
 	}
-	printf("str_value: %s \n",str_value);
 	gatt_write_char(attrib, 0x0017, value, len, char_write_req_cb,
 									NULL);
 	return FALSE ;
@@ -1562,8 +1536,6 @@ static struct {
 	{ "connect",		cmd_connect,		"c", 			"(-c <address [address type]) Connect to a remote device" },
 	{ "write",			cmd_char_write,		"w",			"(-w <handle> <value>) Turn ON/OFF bulb (No response)" },
 	{ "dimmer/color",	cmd_char_write,		"d",			"(-d/-l <handle> <value>>) Dimmer/change color (No response)" },
-	//{ "read",			cmd_char_read,		"r",			"Characteristics Value/Descriptor Read" },
-	//{ "interactive",    0 ,   "t",                    "interactive" },
 	{ NULL, NULL, 0}
 };
 
@@ -1579,29 +1551,6 @@ static void cmd_help(int parameter,int argc ,char **argvp)
 }
 
 static GOptionEntry bt_options[] = {
-	{ "help", 0 , 0, G_OPTION_ARG_NONE, &opt_bt_help,
-		"list HCI interface)",NULL },
-	{ "hci-list", 'i', 0, G_OPTION_ARG_NONE, &opt_hci_list,
-		"list HCI interface)",NULL },
-	{ "hci-reset", 'u', 0, G_OPTION_ARG_STRING, &opt_hci_reset,
-		"reset HCI interface)",NULL },
-	{ "scan", 'b', 0, G_OPTION_ARG_NONE, &opt_bt_scan,
-		"scan bluetooth devices",NULL },
-	{ "lescan", 's' , 0, G_OPTION_ARG_NONE, &opt_bt_lescan,
-		"scan LE bluetooth devices",NULL },
-	{ "status", 'q' , 0, G_OPTION_ARG_NONE, &opt_bt_status,
-		"status bluetooth devices",NULL },
-	{ "char-write-req", 'w', 0, G_OPTION_ARG_NONE, &opt_write,
-		"Characteristics Value Write (Write Request)", NULL },
-	{ "device", 'c', 0, G_OPTION_ARG_STRING, &opt_dst,
-		"Specify remote Bluetooth address", "MAC" },
-	{ "handle", 'a' , 0, G_OPTION_ARG_INT, &opt_handle,
-		"Read/Write characteristic by handle(required)", "0x0001" },
-	{ "value", 'v' , 0, G_OPTION_ARG_STRING, &opt_value,
-		"Write characteristic value (required for write operation)",
-		"0x0001" },
-	{ "interactive", 'p', 0, G_OPTION_ARG_NONE, &opt_interactive,
-		 "Use interactive mode", NULL },	
 	{ NULL },
 };
 
@@ -1618,12 +1567,6 @@ int main(int argc, char *argv[])
 	opt_dst_type = g_strdup("public");
 	// int count_argv_command ;
 	char *argvp;
-
-	if(argc <= 1)
-	{
-		cmd_lescan(0,0,NULL);
-		return 1;
-	}
 
     argvp = *argv ;
 
@@ -1646,56 +1589,8 @@ int main(int argc, char *argv[])
 		g_error_free(gerr);
 	}
 
-	if (opt_interactive) 
-	{
-        interactive(opt_src, opt_dst, opt_dst_type, opt_psm);
-		goto finish;
-     }
+	commands[ENUM_COMMAND_LESCAN].func(di.dev_id, argc, argv);
 
-	if(opt_bt_help)
-	{
-		commands[ENUM_COMMAND_HELP].func(0,0,NULL);
-		exit(1);
-	}
-	else if(opt_hci_list)
-	{
-		commands[ENUM_COMMAND_HCI_LIST].func(di.dev_id, argc, argv);
-		exit(1);
-	}
- 	else if(opt_hci_reset)
- 	{
-		commands[ENUM_COMMAND_HCI_RESET].func(di.dev_id, argc, &argvp);
-		exit(1);
- 	}
-	else if(opt_bt_scan)
-	{
-		commands[ENUM_COMMAND_SCAN].func(di.dev_id, argc, argv);
-		// exit(1);
-	}
-	else if(opt_bt_status)
-	{
-		commands[ENUM_COMMAND_STATUS].func(di.dev_id, argc, argv);
-		exit(1);
-	}
-	else if(opt_bt_lescan)
-	{
-		commands[ENUM_COMMAND_LESCAN].func(di.dev_id, argc, argv);
-		// exit(1)
-		printf("end.............\n");
-	}
-	// else if(opt_write)
-	// {
-	// 	commands[ENUM_COMMAND_WRITE].func(di.dev_id,argc, argv);
-	// }
-	// else if(opt_read)
-	// {
-	// 	commands[ENUM_COMMAND_READ].func(di.dev_id,argc, argv);
-	// }
-	else
-	{
-		got_error = TRUE;;
-		goto finish;
-	}
 
 	if (opt_dst == NULL) 
 	{
@@ -1703,8 +1598,7 @@ int main(int argc, char *argv[])
 		got_error = TRUE;
 		goto finish;
 	}
-
-	printf("opt_dst: %s\n",opt_dst);
+	
 	pchan = gatt_connect(opt_src, opt_dst, opt_dst_type, opt_sec_level,
 					opt_psm, opt_mtu, connect_cb,&gerr);
 	if (pchan == NULL) 
